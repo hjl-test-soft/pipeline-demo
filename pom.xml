@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>2.1.2.RELEASE</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.example</groupId>
+	<artifactId>pipeline-demo</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>pipeline-demo</name>
+	<description>Demo project for Spring Boot</description>
+
+	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <encoding>UTF-8</encoding>
+        <java.version>1.8</java.version>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+		<sonar.version>3.6.0.1398</sonar.version>
+        <sonar.exclusions>**/test/*,**/target/sonar/*</sonar.exclusions>
+	</properties>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                    <encoding>${encoding}</encoding>
+                </configuration>
+			</plugin>
+			<!--mvn sonar:sonar-->
+		    <!--指定扫描插件版本：mvn org.sonarsource.scanner.maven:sonar-maven-plugin:3.6.0.1398:sonar-->
+		    <!--mvn clean verify sonar:sonar-->
+		    <!--mvn clean compile sonar:sonar -Dsonar.host.url=http://192.168.1.93:9000-->
+		    <plugin>
+		        <groupId>org.sonarsource.scanner.maven</groupId>
+		        <artifactId>sonar-maven-plugin</artifactId>
+		        <version>${sonar.version}</version>
+		    </plugin>
+
+		</plugins>
+	</build>
+	<repositories>  
+        <repository>  
+            <id>aliyunmaven</id>  
+            <name>aliyun maven</name>  
+            <url>http://maven.aliyun.com/nexus/content/groups/public/</url>  
+            <releases>  
+                <enabled>true</enabled>  
+            </releases>  
+            <snapshots>  
+                <enabled>false</enabled>  
+            </snapshots>  
+        </repository>  
+	</repositories>
+</project>
