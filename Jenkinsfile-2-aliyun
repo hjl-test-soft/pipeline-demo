@@ -13,41 +13,24 @@ pipeline {
         string(name: 'APP_NAME', defaultValue: 'pipeline-demo', description: 'k8s中标签名')
         string(name: 'K8S_NAMESPACE', defaultValue: 'devops', description: 'k8s的namespace名称')
     }
-
-
-
-
-
     stages {
-        stage('拉取代码'){
-            agent any
-            steps{
-                // git credentialsId: 'dc6b3f14-b7b3-40a9-9880-5cb9f98e114c', url: 'https://gitlab.com/shazforiot/gameoflife.git'
-                checkout([$class: 'GitSCM', branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[credentialsId: 'github_user', url: 'https://github.com/hjl-test-soft/pipeline-demo.git']]])
-            }
-        }
-        stage('编译'){
-            agent any
-            steps{
-                sh 'mvn compile'
-            }
-        }
         stage('静态代码扫描') {
-            // when { expression { env.GIT_TAG != null } }
+            when { expression { env.GIT_TAG != null } }
+            // agent {
+            //     docker {
+            //         image 'maven:3-jdk-8-alpine'
+            //         args '-v $HOME/.m2:/root/.m2'
+            //     }
+            // }
             agent any
             steps {
                 echo '进行静态代码质量扫描'
-                sh 'sh run_sonar.sh'
+                // sh 'mvn sonar:sonar'
             }
 
         }
-        stage('单元测试'){
-            agent any
-            steps{
-                sh 'mvn test'
-            }
-        }
-        stage('代码打包') {
+
+        stage('编译打包') {
             when { expression { env.GIT_TAG != null } }
             agent {
                 docker {
@@ -56,9 +39,10 @@ pipeline {
                 }
             }
             steps {
-                sh 'mvn clean package -Dfile.encoding=UTF-8 -Dmaven.test.skip'
+                sh 'mvn clean package -Dfile.encoding=UTF-8 -DskipTests=true'
                 stash includes: 'target/*.jar', name: 'app'
             }
+
         }
         stage('Docker打包') {
             when { 
