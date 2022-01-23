@@ -23,7 +23,7 @@ pipeline {
             agent any
             steps{
                 // git credentialsId: 'dc6b3f14-b7b3-40a9-9880-5cb9f98e114c', url: 'https://gitlab.com/shazforiot/gameoflife.git'
-                checkout([$class: 'GitSCM', branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[credentialsId: 'github_user', url: 'https://github.com/hjl-test-soft/pipeline-demo.git']]])
+                checkout([$class: 'GitSCM', branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[credentialsId: 'github_user', url: 'https://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@github.com/hjl-test-soft/pipeline-demo.git']]])
             }
         }
         stage('编译'){
