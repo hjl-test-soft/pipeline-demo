@@ -17,4 +17,4 @@ COPY target/$JAR_FILE $WORK_PATH/
 
 WORKDIR $WORK_PATH
 
-ENTRYPOINT exec java $JAVA_OPTS -jar $JAR_FILE
+ENTRYPOINT exec java -jar /opt/demo/$JAR_FILE
