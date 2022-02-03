@@ -95,7 +95,8 @@ podTemplate(
                 echo "5.Docker打包"
                 container('dockerbuildimage') {
                     echo 'Docker打包'
-                    sh 'docker build -f Dockerfile --build-arg jar_name=target/pipeline-demo-0.0.1-SNAPSHOT.jar -t pipeline-demo:$Tag . ' 
+                    // 具体的格式依据Dockerfile中的传递参数
+                    sh 'docker build -f Dockerfile --build-arg JAR_FILE=pipeline-demo-0.0.1-SNAPSHOT.jar -t pipeline-demo:$Tag . ' 
                     echo 'docker build successul finished'
                     
                     echo '进行tag'
