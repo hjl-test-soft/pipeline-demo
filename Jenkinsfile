@@ -1,6 +1,9 @@
 def slavename = "${JOB_NAME}-${UUID.randomUUID().toString()}"
 def HARBOR_HOST = "registry.cn-qingdao.aliyuncs.com"
 def DOCKER_IMAGE = "haojile/pipeline-demo"
+def K8S_NAMESPACE = "devops"
+def APP_NAME = "pipeline-demo"
+
 
 environment {
         HARBOR_CREDS = credentials('jenkins-harbor-creds')
@@ -13,11 +16,15 @@ podTemplate(
     name: slavename, 
     label: slavename, 
     cloud: 'kubernetes',
+    serviceAccount: 'jenkins-admin', 
     namespace: 'devops', 
     containers: [
         containerTemplate(name: 'maven', image: 'maven:3.3.9-jdk-8-alpine', ttyEnabled: true, command: 'cat'),
         containerTemplate(name: 'dockerbuildimage', image: 'herychemo/dind-java-maven:latest', ttyEnabled: true, command: 'cat'),
-        containerTemplate(name: 'golang', image: 'golang:1.8.0', ttyEnabled: true, command: 'cat')
+        containerTemplate(name: 'golang', image: 'golang:1.8.0', ttyEnabled: true, command: 'cat'),
+        containerTemplate(name: 'helm-kubectl-docker', image: 'lwolf/helm-kubectl-docker:v1.21.1-v3.6.0', ttyEnabled: true, command: 'cat')
+        
+        
     ]
     ,volumes: [
         persistentVolumeClaim(mountPath: '/data/jenkins_slave', claimName:'jenkins-slave-pvc'),
@@ -103,6 +110,40 @@ podTemplate(
                 }
                 
             }
+            
+            stage('拉取镜像') {
+                echo "6.拉取镜像"
+                container('dockerbuildimage') {
+                    echo '拉取镜像'
+                    withCredentials([usernamePassword(credentialsId: 'jenkins-cn-qingdao.aliyuncs.com', passwordVariable: 'HARBOR_CREDS_PSW', usernameVariable: 'HARBOR_CREDS_USR')]) {
+                        sh 'docker login -u ${HARBOR_CREDS_USR} -p ${HARBOR_CREDS_PSW} '+HARBOR_HOST
+                        sh 'docker pull '+HARBOR_HOST+'/'+DOCKER_IMAGE+':$Tag ' 
+                    }
+                }
+                
+            }
+            
+            stage('K8s发布') {
+                echo "7.K8s发布"
+                container('helm-kubectl-docker') {
+                    echo 'K8s发布'
+                    withCredentials([usernamePassword(credentialsId: 'jenkins-cn-qingdao.aliyuncs.com', passwordVariable: 'HARBOR_CREDS_PSW', usernameVariable: 'HARBOR_CREDS_USR')]) {
+                        // sh 'docker login -u ${HARBOR_CREDS_USR} -p ${HARBOR_CREDS_PSW} '+HARBOR_HOST
+                        // sh 'docker pull '+HARBOR_HOST+'/'+DOCKER_IMAGE+':$Tag ' 
+                        
+                        sh "mkdir -p ~/.kube"
+                        // sh "echo ${K8S_CONFIG} | base64 -d > ~/.kube/config"
+                        sh "sed -e 's#{IMAGE_URL}#"+HARBOR_HOST+"/"+DOCKER_IMAGE+"#g;s#{IMAGE_TAG}#$Tag#g;s#{APP_NAME}#"+APP_NAME+"#g;s#{SPRING_PROFILE}#k8s-test#g' k8s-deployment.tpl > k8s-deployment.yml"
+                        sh 'cat k8s-deployment.yml'
+                        sh "kubectl apply -f k8s-deployment.yml --namespace="+K8S_NAMESPACE
+                    
+                    }
+                    echo "K8s发布完成"
+            
+                }
+                
+            }
+            
         }
     
 
