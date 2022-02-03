@@ -1,0 +1,71 @@
+def slavename = "${JOB_NAME}-${UUID.randomUUID().toString()}"
+podTemplate(name: 'jenkins-slave-name', cloud: 'kubernetes',namespace: 'devops', containers: [
+    containerTemplate(name: 'maven', label: slavename, image: 'maven:3.3.9-jdk-8-alpine', ttyEnabled: true, command: 'cat'),
+    containerTemplate(name: 'golang', image: 'golang:1.8.0', ttyEnabled: true, command: 'cat')
+  ]) {
+        node(slavename) {
+         //   environment {
+         //       HARBOR_CREDS = credentials('jenkins-harbor-creds')
+         //       K8S_CONFIG = credentials('jenkins-k8s-config')
+         //       GIT_TAG = sh(returnStdout: true,script: 'git describe --tags --always').trim()
+         //   }
+         //   parameters {
+         //       // registry.cn-qingdao.aliyuncs.com/haojile/jenkins
+         //       string(name: 'HARBOR_HOST', defaultValue: 'registry.cn-qingdao.aliyuncs.com', description: 'harbor仓库地址')
+         //       string(name: 'DOCKER_IMAGE', defaultValue: 'haojile/pipeline-demo', description: 'docker镜像名')
+         //       string(name: 'APP_NAME', defaultValue: 'pipeline-demo', description: 'k8s中标签名')
+         //       string(name: 'K8S_NAMESPACE', defaultValue: 'devops', description: 'k8s的namespace名称')
+         //   }
+
+            stage('拉取代码') {
+                git  credentialsId: 'faxinba-gitee-readonly', url: 'https://gitee.com/hjl_kubernetes/pipeline-demo.git'
+            }
+
+            stage('编译代码') {
+                container('maven') {
+                    stage('编译代码') {
+                        sh 'mvn -B clean install'
+                    }
+                }
+            }
+
+            stage('静态代码扫描') {
+                container('maven') {
+                    stage('静态代码扫描') {
+                        echo '3.Run sonar'
+                        sh 'sh run_sonar.sh'
+                    }
+                }
+            }
+
+            stage('maven打包') {
+                container('maven') {
+                    stage('maven打包') {
+                        sh 'mvn -B clean package'
+                    }
+                }
+            }
+
+            stage('Docker打包') {
+                container('maven') {
+                    stage('Docker打包') {
+                        sh 'TODO: Docker打包'
+                    }
+                }
+            //    when { 
+            //        allOf {
+            //            expression { env.GIT_TAG != null }
+            //        }
+            //    }
+            //    agent any
+            //    steps {
+            //        unstash 'app'
+            //        sh "docker login -u ${HARBOR_CREDS_USR} -p ${HARBOR_CREDS_PSW} ${params.HARBOR_HOST}"
+            //        sh "docker build --build-arg JAR_FILE=`ls target/*.jar |cut -d '/' -f2` -t ${params.HARBOR_HOST}/${params.DOCKER_IMAGE}:${GIT_TAG} ."
+            //        sh "docker push ${params.HARBOR_HOST}/${params.DOCKER_IMAGE}:${GIT_TAG}"
+            //        sh "docker rmi ${params.HARBOR_HOST}/${params.DOCKER_IMAGE}:${GIT_TAG}"
+            //    }
+                
+            }
+    }
+}

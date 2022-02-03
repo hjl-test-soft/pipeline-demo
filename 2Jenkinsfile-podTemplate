@@ -1,0 +1,79 @@
+
+
+def slavename = "jenkins-slave-${JOB_NAME}-${UUID.randomUUID().toString()}"
+podTemplate(name: slavename, label: slavename, cloud: 'kubernetes', namespace: 'devops',serviceAccount: 'jenkins-admin', lcontainers: [
+    containerTemplate(name: 'maven', image: 'maven:3.6.1-jdk-8-alpine', ttyEnabled: true, command: 'cat'),containerTemplate(name: 'jenkins-slave-maven', image: 'vimal13/jenkins-slave-maven', ttyEnabled: true, command: 'cat'),
+  ],volumes: [
+    //persistentVolumeClaim(mountPath: '/tmp/', claimName: 'tomcat-jcsj-data')
+    hostPathVolume(hostPath: '/sharefolder/data/jenkins_slave', mountPath:'/var/jenkins_home'),
+  ]) {
+
+    node('maven') {
+        stage('GitClone') {
+            git 'https://gitee.com/hjl_kubernetes/pipeline-demo.git'
+            container('maven') {
+                stage('Build a Maven project') {
+                    sh 'mvn -B clean install'
+                }
+            }
+        }
+
+        stage('mvn-package') {
+          container(slavename) {
+              sh """
+              mkdir -p /var/jenkins_home/slavename && cd /var/jenkins_home/${JOB_NAME} && mvn clean package && cp -rpf target/*.war /tmp/
+              """
+          }
+        }
+
+
+
+
+    }
+
+
+}
+
+podTemplate(name: 'jenkins-slave', cloud: 'kubernetes',
+  namespace: 'default', label: 'jenkins-slave',
+  serviceAccount: 'default', containers: [
+  containerTemplate(
+      name: 'jenkins-slave',
+      image: 'harbor.59iedu.com/fjhb/jenkins-slave-toolkit:2018-08-10-v1',
+      args: '${computer.jnlpmac} ${computer.name}',
+      ttyEnabled: true,
+      privileged: false,
+      alwaysPullImage:true,
+      )
+  ],
+  volumes: [
+    persistentVolumeClaim(mountPath: '/tmp/', claimName: 'tomcat-jcsj-data')
+  ]) {
+  node('jenkins-slave') {
+    stage('svn-checkout') {
+      container('jnlp') {
+          sh """
+          svn checkout --username=yanglw --password=mypassword http://192.168.1.81/svn/fjhbjsb/k8s-pipeline-test --non-interactive 
+          """
+      }
+    }
+ 
+    stage('mvn-package') {
+      container('jnlp') {
+          sh """
+          mkdir -p /var/\$jenkins_home && cd k8s-pipeline-test && mvn clean package && cp -rpf target/*.war /tmp/
+          """
+      }
+    }
+ 
+    stage('restart') {
+      container('jnlp') {
+          sh """
+          pod_name=`kubectl  get pods -l name=jcsj-dev -o name | cut -d"/" -f2`
+          kubectl delete pod \$pod_name
+          """
+      }
+    }
+ 
+    }
+}

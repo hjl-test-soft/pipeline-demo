@@ -10,7 +10,7 @@ pipeline {
 			}            
 			steps {                
 				echo "1.Git Clone Code"                
-				git url: "https://gitee.com/hjl_kubernetes/pipeline-demo.git"            
+				git url: "https://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@github.com/hjl-test-soft/pipeline-demo.git"            
 			}        
 		}        
 		stage('Maven Build') {            

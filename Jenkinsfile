@@ -1,133 +1,111 @@
-// 需要在jenkins的Credentials设置中配置jenkins-harbor-creds、jenkins-k8s-config参数
-// withCredentials([usernamePassword(credentialsId: 'jenkins-cn-qingdao.aliyuncs.com', passwordVariable: 'Password', usernameVariable: 'Username')]) {
-//   sh 'docker login --u$Username -p$Uassword registry.cn-shanghai.aliyuncs.com'
-// }
+def slavename = "${JOB_NAME}-${UUID.randomUUID().toString()}"
+def HARBOR_HOST = "registry.cn-qingdao.aliyuncs.com"
+def DOCKER_IMAGE = "haojile/pipeline-demo"
 
-
-node{
-    // when { expression { sh(returnStdout: true,script: 'git describe --tags --always').trim() == null } }
-    stage("初始化本地仓库"){
-        // 删除原来旧的仓库
-        sh "rm -rf test-slave"
-        checkout([$class: 'GitSCM', branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[credentialsId: 'faxinba-gitee-readonly', url: 'https://gitee.com/hjl_kubernetes/pipeline-demo.git']]])
-    }
+environment {
+        HARBOR_CREDS = credentials('jenkins-harbor-creds')
+        K8S_CONFIG = credentials('jenkins-k8s-config')
+        // GIT_TAG = sh(returnStdout: true,script: 'git describe --tags --always').trim()
+        // GIT_TAG = '${Tag}'
 }
 
+podTemplate(
+    name: slavename, 
+    label: slavename, 
+    cloud: 'kubernetes',
+    namespace: 'devops', 
+    containers: [
+        containerTemplate(name: 'maven', image: 'maven:3.3.9-jdk-8-alpine', ttyEnabled: true, command: 'cat'),
+        containerTemplate(name: 'dockerbuildimage', image: 'herychemo/dind-java-maven:latest', ttyEnabled: true, command: 'cat'),
+        containerTemplate(name: 'golang', image: 'golang:1.8.0', ttyEnabled: true, command: 'cat')
+    ]
+    ,volumes: [
+        persistentVolumeClaim(mountPath: '/data/jenkins_slave', claimName:'jenkins-slave-pvc'),
+        persistentVolumeClaim(mountPath: '/root/.m2', claimName:'maven-local-pvc'),
+        // hostPathVolume(mountPath: '/root/.m2', hostPath:'/root/.m2')
+        // hostPathVolume(mountPath: '$(which docker)', hostPath: '/usr/bin/docker'),
+        hostPathVolume(mountPath: '/var/run/docker.sock', hostPath: '/var/run/docker.sock'),
+        hostPathVolume(mountPath: '/usr/bin/docker', hostPath: '/usr/bin/docker')
+    ]
+    , envVars: [
+        podEnvVar(key: 'JENKINS_TUNNEL', value: '10.101.98.35:50000')
+        // podEnvVar(key: 'JENKINS_AGENT_WORKDIR', value: '/home/jenkins')
+        ]
+  ) {
+      
+        parameters {
+            // registry.cn-qingdao.aliyuncs.com/haojile/jenkins
+            string(name: 'HARBOR_HOST', defaultValue: 'registry.cn-qingdao.aliyuncs.com', description: 'harbor仓库地址')
+            string(name: 'DOCKER_IMAGE', defaultValue: 'haojile/pipeline-demo', description: 'docker镜像名')
+            string(name: 'APP_NAME', defaultValue: 'pipeline-demo', description: 'k8s中标签名')
+            string(name: 'K8S_NAMESPACE', defaultValue: 'devops', description: 'k8s的namespace名称')
+            string(name: 'Tag', defaultValue: 'devops', description: 'Gitda打包的Tag')
+        }
 
-pipeline {
-    agent any
-    environment {
-        // HARBOR_CREDS = credentials('faxinba-gitee-readonly')
-        // K8S_CONFIG = credentials('jenkins-k8s-config')
-        GIT_TAG = sh(returnStdout: true,script: 'git describe --tags --always').trim()
-    }
-    parameters {
-        // registry.cn-qingdao.aliyuncs.com/haojile/jenkins
-        string(name: 'HARBOR_HOST', defaultValue: 'registry.cn-qingdao.aliyuncs.com', description: 'harbor仓库地址')
-        string(name: 'DOCKER_IMAGE', defaultValue: 'haojile/pipeline-demo', description: 'docker镜像名')
-        string(name: 'APP_NAME', defaultValue: 'pipeline-demo', description: 'k8s中标签名')
-        string(name: 'K8S_NAMESPACE', defaultValue: 'devops', description: 'k8s的namespace名称')
-    }
-    stages {
-        // docker pull maven:3-jdk-8-alpine
-        stage('拉取代码'){
-            // agent any
-            // agent {                
-            //     label 'master'            
-            // }
-            agent {
-                docker {
-                    image 'docker pull maven:3-jdk-8-alpine'
-                    args '-v /root/.m2:/root/.m2'
-                 }            
-            }       
-            steps{
-                echo "1.Git Clone Code"
-                // git credentialsId: 'dc6b3f14-b7b3-40a9-9880-5cb9f98e114c', url: 'https://gitlab.com/shazforiot/gameoflife.git'
-                //checkout([$class: 'GitSCM', branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[url: 'https://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@github.com/hjl-test-soft/pipeline-demo.git']]])
-                checkout([$class: 'GitSCM', branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[credentialsId: 'faxinba-gitee-readonly', url: 'https://gitee.com/hjl_kubernetes/pipeline-demo.git']]])
+        properties([
+            parameters([
+                string(name: 'HARBOR_HOST', defaultValue: 'registry.cn-qingdao.aliyuncs.com', description: 'harbor仓库地址'),
+                string(name: 'DOCKER_IMAGE', defaultValue: 'haojile/pipeline-demo', description: 'docker镜像名'),
+                string(name: 'APP_NAME', defaultValue: 'pipeline-demo', description: 'k8s中标签名'),
+                string(name: 'K8S_NAMESPACE', defaultValue: 'devops', description: 'k8s的namespace名称'),
+                string(name: 'Tag', defaultValue: 'devops', description: 'Gitda打包的Tag')
+        ])])
+
+        node(slavename) {
+            
+            stage('拉取代码') {
+                echo "1.拉取代码"
+                sh 'echo 当前目录'
+                sh 'pwd'
+                git  credentialsId: 'faxinba-gitee-readonly', url: 'https://gitee.com/hjl_kubernetes/pipeline-demo.git'
             }
-        }
-        stage('编译代码') { 
-            when { expression { env.GIT_TAG != null } }
-            agent {
-                docker {
-                    image 'maven:3-jdk-8-alpine'
-                    args '-v /root/.m2:/root/.m2'
-                 }            
-            }            
-            steps {
-                    echo "2.Maven Complie Stage"
-                     sh 'mvn -B clean Compile -Dmaven.test.skip=true'
-                   }        
-        }
-        stage('静态代码扫描') { 
-            when { expression { env.GIT_TAG != null } }           
-            agent {
-                docker {
-                    image 'maven:3-jdk-8-alpine'
-                    args '-v /root/.m2:/root/.m2'
-                 }            
-            }            
-            steps {
-                    // echo "3.Maven Complie Stage"
-                    // sh 'mvn -B clean compile -Dmaven.test.skip=true'
+
+            stage('编译代码') {
+                echo "2.编译代码"
+                container('maven') {
+                stage('编译代码') {
+                    sh 'mvn -B clean install'
+                }
+                }
+            }
+
+            stage('静态代码扫描') {
+                echo "3.静态代码扫描"
+                container('maven') {
                     echo '3.Run sonar'
                     sh 'sh run_sonar.sh'
-            } 
-        }
-        stage('Maven打包') {  
-            when { expression { env.GIT_TAG != null } }          
-            agent {
-                docker {
-                    image 'maven:3-jdk-8-alpine'
-                    args '-v /root/.m2:/root/.m2'
-                 }            
-            }            
-            steps {
-                    echo "4.Maven Build Stage"
-                    sh 'mvn -B clean package -Dmaven.test.skip=true  -Dmaven.test.skip'
-                    stash includes: 'target/*.jar', name: 'app'
-                   }        
-        }
-        stage('Docker镜像打包') {
-            when { 
-                allOf {
-                    expression { env.GIT_TAG != null }
                 }
             }
-            agent any
-            steps {
-                unstash 'app'
-                withCredentials([usernamePassword(credentialsId: 'jenkins-cn-qingdao.aliyuncs.com', passwordVariable: 'Password', usernameVariable: 'Username')]) {
-                sh 'docker login --u$Username -p$Uassword ${params.HARBOR_HOST}'
+
+            stage('maven打包') {
+                echo "4.maven打包"
+                container('maven') {
+                    sh 'mvn -B clean package'
                 }
-                // sh "docker login -u ${HARBOR_CREDS_USR} -p ${HARBOR_CREDS_PSW} ${params.HARBOR_HOST}"
-                sh "docker build --build-arg JAR_FILE=`ls target/*.jar |cut -d '/' -f2` -t ${params.HARBOR_HOST}/${params.DOCKER_IMAGE}:${GIT_TAG} ."
-                sh "docker push ${params.HARBOR_HOST}/${params.DOCKER_IMAGE}:${GIT_TAG}"
-                sh "docker rmi ${params.HARBOR_HOST}/${params.DOCKER_IMAGE}:${GIT_TAG}"
             }
             
-        }
-        stage('部署') {
-            when { 
-                allOf {
-                    expression { env.GIT_TAG != null }
-                }
-            }
-            agent {
-                docker {
-                    image 'lwolf/helm-kubectl-docker'
-                }
-            }
-            steps {
-                sh "mkdir -p ~/.kube"
-                // sh "echo ${K8S_CONFIG} | base64 -d > ~/.kube/config"
-                sh "sed -e 's#{IMAGE_URL}#${params.HARBOR_HOST}/${params.DOCKER_IMAGE}#g;s#{IMAGE_TAG}#${GIT_TAG}#g;s#{APP_NAME}#${params.APP_NAME}#g;s#{SPRING_PROFILE}#k8s-test#g' k8s-deployment.tpl > k8s-deployment.yml"
-                sh "kubectl apply -f k8s-deployment.yml --namespace=${params.K8S_NAMESPACE}"
-            }
+            stage('Docker打包') {
+                echo "5.Docker打包"
+                container('dockerbuildimage') {
+                    echo 'Docker打包'
+                    sh 'docker build -f Dockerfile --build-arg jar_name=target/pipeline-demo-0.0.1-SNAPSHOT.jar -t pipeline-demo:$Tag . ' 
+                    echo 'docker build successul finished'
+                    
+                    echo '进行tag'
+                    sh 'docker tag  pipeline-demo:$Tag '+HARBOR_HOST+'/'+DOCKER_IMAGE+':$Tag ' 
+                    echo "docker tag successul finished"
+                    withCredentials([usernamePassword(credentialsId: 'jenkins-cn-qingdao.aliyuncs.com', passwordVariable: 'HARBOR_CREDS_PSW', usernameVariable: 'HARBOR_CREDS_USR')]) {
+                        sh 'docker login -u ${HARBOR_CREDS_USR} -p ${HARBOR_CREDS_PSW} '+HARBOR_HOST
+                        sh 'docker push '+HARBOR_HOST+'/'+DOCKER_IMAGE+':$Tag ' 
+                    }
+                    echo "docker push successul finished"
             
+                }
+                
+            }
         }
-        
+    
+
     }
-}
+    
+

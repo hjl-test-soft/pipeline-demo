@@ -1,0 +1,55 @@
+//def label = "jenkins-slave-$PROJECT-${UUID.randomUUID().toString()}"
+
+def jenkinslabel = "jenkins-slave-${JOB_NAME}-${UUID.randomUUID().toString()}"
+
+//def jenkinslabel = "jenkins-slave${PROJECT}-${UUID.randomUUID().toString()}"
+podTemplate(label: jenkinslabel, 
+            cloud: 'kubernetes', 
+            containers: [
+            containerTemplate(name: 'jnlp',
+                              ttyEnabled: true,
+                              image: 'jenkins/jnlp-slave:alpine', imagePullPolicy: 'Always'),
+          //  containerTemplate(name: 'jnlp-mvn',
+          //                    ttyEnabled: true,
+          //                    command: 'cat',
+          //                    image: 'jenkins/jnlp-slave-maven:v1.5', imagePullPolicy: 'Always'),
+          //  containerTemplate(name: 'jnlp-docker',
+          //                    ttyEnabled: true,
+          //                    command: 'cat',
+          //                    image: 'jenkins/jnlp-slave-docker:v1.6', imagePullPolicy: 'Always')
+            ],
+            volumes: [
+                hostPathVolume(hostPath: '/sharefolder/data/jenkins_slave', mountPath:'/var/jenkins_home'),
+          //      hostPathVolume(hostPath: '/sharefolder/data/jenkins_slave', mountPath:'/var/jenkins_home'),
+          //      hostPathVolume(hostPath: '/etc/docker/daemon.json', mountPath:'/etc/docker/daemon.json')
+            ]
+    ){
+    node(jenkinslabel) {
+        stage('svn-checkout') {
+          container('jnlp') {
+              //sh """
+              //svn checkout --username=yanglw --password=mypassword http://192.168.1.81/svn/fjhbjsb/k8s-pipeline-test --non-interactive 
+              //"""
+              checkout([$class: 'GitSCM', branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[credentialsId: 'faxinba-gitee-readonly', url: 'https://gitee.com/hjl_kubernetes/pipeline-demo.git']]])
+          }
+        }
+     
+        stage('mvn-package') {
+          container('jnlp') {
+              sh """
+              cd pipeline-demo && mvn clean package && cp -rpf target/*.war /tmp/
+              """
+          }
+        }
+     
+        stage('restart') {
+          container('jnlp') {
+              sh """
+              pod_name=`kubectl  get pods -l name=pipeline-demo -o name | cut -d"/" -f2`
+              # kubectl delete pod \$pod_name
+              """
+          }
+        }
+   
+      }
+}
