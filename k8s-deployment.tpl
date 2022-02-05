@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {APP_NAME}-deployment
+  namespace: {NAMESPACE}
   labels:
     app: {APP_NAME}
 spec:
