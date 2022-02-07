@@ -82,7 +82,7 @@ podTemplate(
                 echo "3.静态代码扫描"
                 container('maven') {
                     echo '3.Run sonar'
-                    sh 'sh run_sonar.sh'
+                    // sh 'sh run_sonar.sh'
                 }
             }
 
@@ -99,17 +99,17 @@ podTemplate(
                     // sh 'docker rmi registry.cn-qingdao.aliyuncs.com/haojile/pipeline-demo:v1.0.0'
                     echo 'Docker打包'
                     // 具体的格式依据Dockerfile中的传递参数
-                    sh 'docker build -f Dockerfile --build-arg JAR_FILE=pipeline-demo-0.0.1-SNAPSHOT.jar -t pipeline-demo:$Tag . ' 
-                    echo 'docker build successul finished'
+                    // sh 'docker build -f Dockerfile --build-arg JAR_FILE=pipeline-demo-0.0.1-SNAPSHOT.jar -t pipeline-demo:$Tag . ' 
+                    // echo 'docker build successul finished'
                     
-                    echo '进行tag'
-                    sh 'docker tag  pipeline-demo:$Tag '+HARBOR_HOST+'/'+DOCKER_IMAGE+':$Tag ' 
-                    echo "docker tag successul finished"
-                    withCredentials([usernamePassword(credentialsId: 'jenkins-cn-qingdao.aliyuncs.com', passwordVariable: 'HARBOR_CREDS_PSW', usernameVariable: 'HARBOR_CREDS_USR')]) {
-                        sh 'docker login -u ${HARBOR_CREDS_USR} -p ${HARBOR_CREDS_PSW} '+HARBOR_HOST
-                        sh 'docker push '+HARBOR_HOST+'/'+DOCKER_IMAGE+':$Tag ' 
-                    }
-                    echo "docker push successul finished"
+                    // echo '进行tag'
+                    // sh 'docker tag  pipeline-demo:$Tag '+HARBOR_HOST+'/'+DOCKER_IMAGE+':$Tag ' 
+                    // echo "docker tag successul finished"
+                    // withCredentials([usernamePassword(credentialsId: 'jenkins-cn-qingdao.aliyuncs.com', passwordVariable: 'HARBOR_CREDS_PSW', usernameVariable: 'HARBOR_CREDS_USR')]) {
+                    //     sh 'docker login -u ${HARBOR_CREDS_USR} -p ${HARBOR_CREDS_PSW} '+HARBOR_HOST
+                    //     sh 'docker push '+HARBOR_HOST+'/'+DOCKER_IMAGE+':$Tag ' 
+                    // }
+                    // echo "docker push successul finished"
             
                 }
                 
@@ -127,6 +127,35 @@ podTemplate(
                 
             }
             
+
+            stage('Kubernetes 阶段'){
+                // kubectl 镜像
+                container('kubectl') {
+                    // 使用 Kubectl Cli 插件的方法，提供 Kubernetes 环境，在其方法块内部能够执行 kubectl 命令
+                    withKubeConfig([credentialsId: "${params.KUBERNETES_CREADENTIAL}",serverUrl: "https://kubernetes.default.svc.cluster.local"]) {
+                        // 使用 configFile 插件，创建 Kubernetes 部署文件 deployment.yaml
+                        configFileProvider([configFile(fileId: "${params.KUBERNETES_DEPLOYMENT_ID}", targetLocation: "deployment.yaml")]){
+                            // 读取 Kubernetes 部署文件
+                            deploy = readFile encoding: "UTF-8", file: "k8s-deployment.tpl"
+                            // 替换部署文件中的变量，并将替换后的文本赋予 deployfile 变量
+                            deployfile = deploy.replaceAll("{IMAGE_URL}",HARBOR_HOST)
+                                           .replaceAll("{IMAGE_TAG}","$Tag")
+                                           .replaceAll("{APP_NAME}",APP_NAME)
+                                           .replaceAll("{SPRING_PROFILE}","k8s-test")
+                                           .replaceAll("{NAMESPACE}",K8S_NAMESPACE)
+                            // 生成新的 Kubernetes 部署文件，内容为 deployfile 变量中的文本，文件名称为 "k8s-deployment.yaml"
+                            writeFile encoding: 'UTF-8', file: './k8s-deployment.yaml', text: "${deployfile}"
+                            // 输出新创建的部署 yaml 文件内容
+                            sh "cat k8s-deployment.yaml"
+                            // 执行 Kuberctl 命令进行部署操作
+                            sh "kubectl apply -n ${params.KUBERNETES_NAMESPACE} -f k8s-deployment.yaml"
+                        }
+                    }
+                }
+            }
+
+
+
             stage('K8s发布') {
                 echo "7.K8s发布"
                 container('roffe-kubectl') {
@@ -141,39 +170,27 @@ podTemplate(
                         
                         sh "echo ${JENKINS_K8S_CONFIG_variable} | base64 -d > ~/.kube/config"
                         // sh "echo ${JENKINS_K8S_CONFIG_variable} > ~/.kube/config"
-                    //    sh 'chown $(id -u):$(id -g) $HOME/.kube/config'
-                    //    sh "sed -e 's#{IMAGE_URL}#"+HARBOR_HOST+"/"+DOCKER_IMAGE+"#g;s#{IMAGE_TAG}#$Tag#g;s#{APP_NAME}#"+APP_NAME+"#g;s#{SPRING_PROFILE}#k8s-test#g;s#{NAMESPACE}#"+K8S_NAMESPACE+"#g' k8s-deployment.tpl > k8s-deployment.yml"
-                    //    // def k8s_deployment="sed -e 's#{IMAGE_URL}#"+HARBOR_HOST+"/"+DOCKER_IMAGE+"#g;s#{IMAGE_TAG}#$Tag#g;s#{APP_NAME}#"+APP_NAME+"#g;s#{SPRING_PROFILE}#k8s-test#g' k8s-deployment.tpl"
-                    //    // sh 'echo ${k8s_deployment}' 
-                    //    // writeFile encoding: 'utf-8', file: 'k8s-deployment.yml', text: '${k8s_deployment}'
-                        
-                        
-                        // 读取 Kubernetes 部署文件
-                        deploy = readFile encoding: "UTF-8", file: "k8s-deployment.tpl"
-                        // 替换部署文件中的变量，并将替换后的文本赋予 deployfile 变量
-                        echo HARBOR_HOST
-                        deployfile = deploy.replaceAll("##IMAGE_URL##",HARBOR_HOST)
-                                        .replaceAll("##DOCKER_IMAGE##",DOCKER_IMAGE)
-                                       .replaceAll("##IMAGE_TAG##","$Tag")
-                                       .replaceAll("##APP_NAME##",APP_NAME)
-                                       .replaceAll("##SPRING_PROFILE##","k8s-test")
-                                       .replaceAll("##NAMESPACE##",K8S_NAMESPACE)
-                        // 生成新的 Kubernetes 部署文件，内容为 deployfile 变量中的文本，文件名称为 "k8s-deployment.yaml"
-                        echo deployfile
-                        // echo ${deployfile}
-                        // echo $deployfile
-                        writeFile encoding: 'UTF-8', file: './k8s-deployment.yaml', text: "${deployfile}"
-                        sh 'ls -al'
-                        sh 'cat k8s-deployment.yaml'
-                        
+                        sh 'chown $(id -u):$(id -g) $HOME/.kube/config'
+                        sh "sed -e 's#{IMAGE_URL}#"+HARBOR_HOST+"/"+DOCKER_IMAGE+"#g;s#{IMAGE_TAG}#$Tag#g;s#{APP_NAME}#"+APP_NAME+"#g;s#{SPRING_PROFILE}#k8s-test#g;s#{NAMESPACE}#"+K8S_NAMESPACE+"#g' k8s-deployment.tpl > k8s-deployment.yml"
+                        // def k8s_deployment="sed -e 's#{IMAGE_URL}#"+HARBOR_HOST+"/"+DOCKER_IMAGE+"#g;s#{IMAGE_TAG}#$Tag#g;s#{APP_NAME}#"+APP_NAME+"#g;s#{SPRING_PROFILE}#k8s-test#g' k8s-deployment.tpl"
+                        // sh 'echo ${k8s_deployment}' 
+                        // writeFile encoding: 'utf-8', file: 'k8s-deployment.yml', text: '${k8s_deployment}'
+                        sh 'cat k8s-deployment.yml'
                         sh 'pwd'
                         sh 'ls -al'
-                        
-                        sh "kubectl apply -n "+K8S_NAMESPACE+" -f k8s-deployment.yaml"
+                        // sh 'ls -al /opt/demo'
+                        // sh "kubectl apply -f k8s-deployment.yml --namespace="+K8S_NAMESPACE
+                        // sh 'kubectl set image deployment/$DEPLOYMENT $DEPLOYMENT=$REGISTRY --namespace=$NAMESPACE'
+                        sh 'kubectl create deployment pipeline-demo-deploy --image=registry.cn-qingdao.aliyuncs.com/haojile/pipeline-demo:v1.0.0 --namespace='+K8S_NAMESPACE
+                        // sh "sleep 100000"
+                    // echo '${JENKINS_K8S_CONFIG_variable}'
+                    // echo '========================'
+                    // def aa='${JENKINS_K8S_CONFIG_variable}'
+                    // echo '${aa}'
+                
                          
                     }
                 
-                    echo "K8s发布完成"
             
                 }
                 

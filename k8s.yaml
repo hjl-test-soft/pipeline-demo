@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pipeline-demo-deployment
+  namespace: devops
+  labels:
+    app: pipeline-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pipeline-demo
+  template:
+    metadata:
+      labels:
+        app: pipeline-demo
+    spec:
+      containers:
+      - name: pipeline-demo
+        image: registry.cn-qingdao.aliyuncs.com/haojile/pipeline-demo:v1.0.0
+        #image: pipeline-demo:v1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 40080
+        env:
+          - name: SPRING_PROFILES_ACTIVE
+            value: k8s-test
